@@ -11,6 +11,11 @@ Spor İstanbul (online.spor.istanbul) tesislerinde tenis, fitness ve yüzme sean
 - 🔔 **Otomatik Alarm**: Rezervasyon saatinden belirlenen dakika önce Telegram üzerinden hatırlatma alarmı.
 - 🛡️ **Güvenli & Thread-Safe**: Arayüz kilitlenmelerine karşı korumalı asenkron yapı.
 
+## 📖 Detaylı Kurulum & Kullanım Rehberi
+
+Telegram botu oluşturma ve iOS (iPhone) üzerinde otomatik SMS doğrulama otomasyonunu kurmak için hazırlanan adım adım resimli rehber için:
+👉 **[GUIDE.md / Kurulum Rehberi](GUIDE.md)** dosyasını inceleyebilirsiniz.
+
 ## Kurulum & Kullanım
 
 1. **Gerekli paketleri yükleyin:**
