@@ -136,8 +136,22 @@ def alarm_zamanlayici_thread(config: dict, is_running_func):
             log(f"Alarm zamanlayıcı hatası: {e}")
         time.sleep(20)
 
+def alarm_sil(config: dict, date_str: str):
+    """Belirtilen tarihe ait var olan alarmları temizler."""
+    try:
+        with _alarm_lock:
+            alarmlar = config.get("aktif_alarmlar", [])
+            yeni_alarmlar = [a for a in alarmlar if a.get("tarih") != date_str and date_str not in a.get("mesaj", "")]
+            if len(yeni_alarmlar) != len(alarmlar):
+                config["aktif_alarmlar"] = yeni_alarmlar
+                from config_manager import save_config
+                save_config(config)
+                log(f"⏰ {date_str} tarihli eski alarmlar temizlendi.")
+    except Exception as e:
+        log(f"Alarm silme hatası: {e}")
+
 def alarm_olustur(config: dict, date_str: str, time_str: str, court: str, dakika_once=None):
-    """Rezervasyon saatinden X dakika önceye alarm kurar."""
+    """Rezervasyon saatine 3 saatten az kaldıysa X dakika önceye alarm kurar."""
     if dakika_once is None:
         dakika_once = config.get("alarm_dakika_once", 30)
     try:
@@ -146,21 +160,40 @@ def alarm_olustur(config: dict, date_str: str, time_str: str, court: str, dakika
         t_parts = time_str.split(" - ")[0].split(":")
         seans_dt = datetime(int(d_parts[2]), int(d_parts[1]), int(d_parts[0]),
                             int(t_parts[0]), int(t_parts[1]))
-        tetik_dt = seans_dt - timedelta(minutes=dakika_once)
-        if tetik_dt <= datetime.now():
-            log(f"Alarm zamanı zaten geçmiş ({tetik_dt}), kurulmadı.")
+        
+        simdi = datetime.now()
+        kalan_saniye = (seans_dt - simdi).total_seconds()
+        
+        # 1. Bu tarih ve saat için zaten alarm kurulmuş mu?
+        with _alarm_lock:
+            mevcut_alarmlar = config.get("aktif_alarmlar", [])
+            for a in mevcut_alarmlar:
+                if a.get("tarih") == date_str and time_str in a.get("mesaj", ""):
+                    return
+
+        # 2. Seansa 3 saatten (10800 saniye) fazla varsa alarmı henüz kurma
+        if kalan_saniye > 3 * 3600:
+            log(f"⏰ Seansa {int(kalan_saniye // 3600)} saat var (>3 saat). Alarm henüz kurulmadı, seansa 3 saat kala kurulacak.")
             return
+
+        tetik_dt = seans_dt - timedelta(minutes=dakika_once)
+        if tetik_dt <= simdi:
+            log(f"Alarm zamanı zaten geçmiş ({tetik_dt.strftime('%H:%M')}), kurulmadı.")
+            return
+
         mesaj = (f"⏰ <b>SEANS YAKLAŞIYOR</b>\n"
                  f"{date_str} {time_str}\nKort: {court}\n"
                  f"{dakika_once} dk içinde başlıyor.")
+
         with _alarm_lock:
             config.setdefault("aktif_alarmlar", []).append({
+                "tarih": date_str,
                 "tetikleme_zamani": tetik_dt.isoformat(),
                 "mesaj": mesaj
             })
             from config_manager import save_config
             save_config(config)
-        log(f"Alarm kuruldu: {tetik_dt.strftime('%d.%m %H:%M')} -> {date_str} {time_str}")
+        log(f"⏰ Alarm kuruldu: {tetik_dt.strftime('%d.%m %H:%M')} -> {date_str} {time_str}")
     except Exception as e:
         log(f"Alarm kurulum hatası: {e}")
 
@@ -268,6 +301,8 @@ def has_active_booking(driver: webdriver.Chrome, config: dict) -> list:
                         "status": status,
                         "element": row
                     })
+                    if "Satış Yapıldı" in status:
+                        alarm_olustur(config, date, time_str, court)
     except Exception as e:
         log(f"Rezervasyon kontrol hatası: {e}")
     
@@ -548,6 +583,7 @@ def run_bot_thread(config: dict, is_running_func):
                                             driver.execute_script("window.confirm = function() { return true; };")
                                             driver.execute_script("arguments[0].click();", cancel_btn)
                                             log("İptal edildi. Yeni seans için takvime dönülüyor.")
+                                            alarm_sil(config, same_day_booking['date'])
                                             send_telegram(f"<b>[SPOR BOTU] Mevcut Seans İptal Edildi</b>\nYeni Seans İçin Yol Açıldı: {best_slot['date']} {best_slot['time']}", config)
                                             action_taken = True
                                             break
