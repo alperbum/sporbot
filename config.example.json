@@ -1,0 +1,27 @@
+{
+    "tc_kimlik": "TC_KIMLIK_NUMARANIZ",
+    "sifre": "SPOR_ISTANBUL_SIFRENIZ",
+    "telegram_token": "TELEGRAM_BOT_TOKEN",
+    "telegram_chat_id": "TELEGRAM_CHAT_ID",
+    "tarama_araligi_dakika": 2,
+    "secili_spor": "TENİS",
+    "tercih_edilen_gunler": [
+        "Pzt",
+        "Sal",
+        "Çar",
+        "Per",
+        "Cum",
+        "Cmt",
+        "Paz"
+    ],
+    "tercih_edilen_saatler": [
+        "18:00",
+        "19:00",
+        "20:00",
+        "21:00"
+    ],
+    "test_modu": false,
+    "yeni_seans_yukseltme_izni": false,
+    "alarm_dakika_once": 30,
+    "aktif_alarmlar": []
+}

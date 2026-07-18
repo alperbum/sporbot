@@ -1,0 +1,15 @@
+# Sensitif ve kişisel veriler
+config.json
+bot.log
+
+# Python cache & temp
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE & OS files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
