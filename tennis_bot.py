@@ -51,14 +51,30 @@ def send_telegram(message: str, config: dict):
     except Exception as e:
         log(f"Telegram hatası: {e}")
 
-def telegram_son_mesajlari_oku(config: dict, son_n_saniye: int = 180) -> list:
-    token = config.get("telegram_token", "")
-    chat_id = config.get("telegram_chat_id", "")
+def telegram_eski_mesajlari_temizle(config: dict):
+    """Telegram update kuyruğundaki tüm eski mesajları okundu olarak işaretler."""
+    token = config.get("telegram_token", "").strip()
+    if not token: return
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    try:
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        updates = data.get("result", [])
+        if updates:
+            last_id = max(u["update_id"] for u in updates)
+            requests.get(url, params={"offset": last_id + 1, "limit": 1}, timeout=5)
+            log(f"Telegram: {len(updates)} eski mesaj temizlendi.")
+    except Exception:
+        pass
+
+def telegram_son_mesajlari_oku(config: dict, son_n_saniye: int = 300) -> list:
+    token = config.get("telegram_token", "").strip()
+    chat_id = str(config.get("telegram_chat_id", "")).strip()
     if not token: return []
     
     url = f"https://api.telegram.org/bot{token}/getUpdates"
     try:
-        resp = requests.get(url, params={"offset": -10}, timeout=10)
+        resp = requests.get(url, timeout=10)
         data = resp.json()
         if not data.get("ok"):
             return []
@@ -70,11 +86,14 @@ def telegram_son_mesajlari_oku(config: dict, son_n_saniye: int = 180) -> list:
             msg = update.get("message", {})
             msg_date = msg.get("date", 0)
             msg_text = msg.get("text", "")
-            msg_chat_id = str(msg.get("chat", {}).get("id", ""))
+            msg_chat_id = str(msg.get("chat", {}).get("id", "")).strip()
 
-            if msg_chat_id == str(chat_id) and (simdi - msg_date) < son_n_saniye:
-                mesajlar.append(msg_text)
+            if (simdi - msg_date) < son_n_saniye:
+                if not chat_id or msg_chat_id == chat_id:
+                    if msg_text:
+                        mesajlar.append(msg_text)
 
+        # Okunan mesajları okundu olarak işaretle (offset commit)
         if updates:
             last_id = max(u["update_id"] for u in updates)
             try:
@@ -88,12 +107,24 @@ def telegram_son_mesajlari_oku(config: dict, son_n_saniye: int = 180) -> list:
 
 def sms_kodunu_bekle(config: dict, max_bekleme_sn: int = 180):
     log(f"SMS kodu bekleniyor (max {max_bekleme_sn}sn)...")
+    
+    # Önce eski mesajları temizle ki yeni gelen SMS'i kaçırmayalım
+    telegram_eski_mesajlari_temizle(config)
+    
     send_telegram("<b>[SPOR BOTU] SMS Onayı Bekleniyor!</b>\nTelefona gelen kodu buraya yönlendirin.", config)
+    time.sleep(2)
+    # Bot'un kendi gönderdiği mesajı da temizle
+    telegram_eski_mesajlari_temizle(config)
 
     baslangic = time.time()
     while (time.time() - baslangic) < max_bekleme_sn:
-        mesajlar = telegram_son_mesajlari_oku(config, son_n_saniye=60)
+        mesajlar = telegram_son_mesajlari_oku(config, son_n_saniye=120)
+        if mesajlar:
+            log(f"Telegram'dan {len(mesajlar)} mesaj okundu: {mesajlar}")
         for mesaj in mesajlar:
+            # Bot'un kendi mesajlarını atla
+            if "[SPOR BOTU]" in mesaj or "SMS Onayı" in mesaj or "Seans Alınıyor" in mesaj:
+                continue
             match = re.search(r'onay kodunuz[:\s]*(\d+)', mesaj, re.IGNORECASE)
             if not match:
                 match = re.search(r'(\d{4,6})', mesaj)
@@ -306,7 +337,7 @@ def has_active_booking(driver: webdriver.Chrome, config: dict) -> list:
     except Exception as e:
         log(f"Rezervasyon kontrol hatası: {e}")
     
-    log(f"Bulunan aktif seans sayısı: {len(bookings)}")
+    log(f"Profil geçmişindeki kayıtlı satır sayısı: {len(bookings)}")
     return bookings
 
 def goto_scheduler(driver: webdriver.Chrome) -> bool:
@@ -379,10 +410,13 @@ def filter_slots(all_slots: list, config: dict) -> list:
     
     filtered = []
     DAY_MAP = {
-        "pazartesi": "Pzt", "salı": "Sal", "sali": "Sal", 
-        "çarşamba": "Çar", "carsamba": "Çar", 
-        "perşembe": "Per", "persmbe": "Per", 
-        "cuma": "Cum", "cumartesi": "Cmt", "pazar": "Paz"
+        "pazartesi": "Pzt", "pzt": "Pzt",
+        "salı": "Sal", "sali": "Sal", "sal": "Sal", 
+        "çarşamba": "Çar", "carsamba": "Çar", "çar": "Çar", 
+        "perşembe": "Per", "persmbe": "Per", "per": "Per", 
+        "cuma": "Cum", "cum": "Cum", 
+        "cumartesi": "Cmt", "cmt": "Cmt", 
+        "pazar": "Paz", "pzr": "Paz", "paz": "Paz"
     }
     
     for slot in all_slots:
@@ -401,26 +435,80 @@ def filter_slots(all_slots: list, config: dict) -> list:
     if sport != "TENİS":
         return filtered
         
-    # Tennis court priority logic
+    # Tennis court priority & level logic
     slots_by_hour = {}
     for s in filtered:
         slots_by_hour.setdefault(s['time'], []).append(s)
         
+    allow_c3 = config.get("kort_3_izni", True)
+    allow_c1 = config.get("kort_1_izni", True)
+    req_c3_for_c1 = config.get("kort1_kort3_sarti", False)
+    
     final_eligible = []
     for hour, h_slots in slots_by_hour.items():
         has_court_3 = any("KORT 3" in s['court'].upper() for s in h_slots)
         
         for s in h_slots:
-            is_court_3 = "KORT 3" in s['court'].upper()
-            is_court_1 = "KORT 1" in s['court'].upper()
+            court_name = s['court'].upper()
+            is_c3 = "KORT 3" in court_name
+            is_c1 = "KORT 1" in court_name
             
-            if is_court_3:
-                final_eligible.append(s)
-            elif is_court_1 and has_court_3:
-                # Kort 1 is only acceptable if Kort 3 is ALSO available at the SAME hour
+            if is_c3:
+                if allow_c3:
+                    final_eligible.append(s)
+            elif is_c1:
+                if allow_c1:
+                    if req_c3_for_c1 and not has_court_3:
+                        # Kort 3 şartı aktif ve o saatte Kort 3 yoksa alma
+                        continue
+                    final_eligible.append(s)
+            else:
+                # Diğer kortlar (Kort 2 vb.)
                 final_eligible.append(s)
                 
     return final_eligible
+
+def select_slot_checkbox(driver, well_element):
+    """
+    Finds and clicks the session checkbox / input / label inside a .well card.
+    """
+    clicked = False
+    
+    # 1. Search for input elements inside well
+    try:
+        inputs = well_element.find_elements(By.CSS_SELECTOR, "input[type='checkbox'], input[type='radio'], input")
+        for inp in inputs:
+            try:
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", inp)
+                if not inp.is_selected():
+                    driver.execute_script("arguments[0].click();", inp)
+                clicked = True
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2. Search for label elements inside well (excluding header titles)
+    try:
+        labels = well_element.find_elements(By.TAG_NAME, "label")
+        for lbl in labels:
+            try:
+                title_attr = lbl.get_attribute("title") or ""
+                if "Salon Adı" not in title_attr:
+                    driver.execute_script("arguments[0].click();", lbl)
+                    clicked = True
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 3. Fallback click on outer well element
+    try:
+        driver.execute_script("arguments[0].click();", well_element)
+    except Exception:
+        pass
+        
+    return clicked
 
 def run_bot_thread(config: dict, is_running_func):
     driver = None
@@ -481,6 +569,8 @@ def run_bot_thread(config: dict, is_running_func):
                 # Parse scheduler
                 log("Tablo taranıyor...")
                 all_available_slots = []
+                total_sessions_count = 0
+                full_sessions_count = 0
                 
                 # Target columns containing a panel header and panel-title (scheduler days)
                 columns = driver.find_elements(By.XPATH, "//div[contains(@class, 'col-') and .//h3[contains(@class, 'panel-title')]]")
@@ -495,6 +585,7 @@ def run_bot_thread(config: dict, is_running_func):
                         
                         wells = col.find_elements(By.CSS_SELECTOR, ".well")
                         for well in wells:
+                            total_sessions_count += 1
                             # Evaluate computed border color in addition to inline style for robustness
                             border_color = driver.execute_script(
                                 "return window.getComputedStyle(arguments[0]).borderColor;", well
@@ -520,11 +611,15 @@ def run_bot_thread(config: dict, is_running_func):
                                     "time": time_str,
                                     "court": court
                                 })
+                            else:
+                                full_sessions_count += 1
                     except Exception as e:
                         log(f"Sütun parse hatası: {e}")
                 
+                log(f"Tabloda toplam {total_sessions_count} seans kutusu bulundu (Yeşil/Boş: {len(all_available_slots)} | Kırmızı/Dolu: {full_sessions_count})")
+                
                 eligible_slots = filter_slots(all_available_slots, config)
-                log(f"Uygun boş seans sayısı: {len(eligible_slots)}")
+                log(f"Kriterlerinize uyan boş seans sayısı: {len(eligible_slots)}")
                 
                 if not eligible_slots:
                     log(f"Kriterlere uygun seans yok. {interval} saniye bekleniyor...")
@@ -603,47 +698,173 @@ def run_bot_thread(config: dict, is_running_func):
                     log(f"Kort rezerve ediliyor: {best_slot['date']} | {best_slot['time']} | {best_slot['court']}")
                     send_telegram(f"<b>[SPOR BOTU] Seans Alınıyor</b>\n{best_slot['date']} | {best_slot['time']} | {best_slot['court']}", config)
                     
+                    # Re-find best_slot well on page
+                    target_well = None
                     try:
-                        driver.execute_script("arguments[0].click();", best_slot['element'])
-                    except Exception:
                         wells = driver.find_elements(By.CSS_SELECTOR, ".well")
                         for w in wells:
-                            if best_slot['court'] in w.text and best_slot['time'] in w.text:
-                                driver.execute_script("arguments[0].click();", w)
+                            w_text = w.text
+                            if best_slot['court'] in w_text and best_slot['time'] in w_text:
+                                target_well = w
                                 break
-                    time.sleep(2)
+                    except Exception:
+                        pass
+                        
+                    if not target_well:
+                        target_well = best_slot['element']
+
+                    log(f"Seans kutucuğu işaretleniyor ({best_slot['time']} - {best_slot['court']})...")
+                    select_slot_checkbox(driver, target_well)
+                    time.sleep(1.5)
                     
                     if config.get("test_modu", False):
-                        log("Test Modu: Onay kutusu işaretlenmedi. Çıkılıyor.")
+                        log("Test Modu: Kaydet butonuna basılmadı. Çıkılıyor.")
                         time.sleep(5)
                     else:
-                        # Checkbox
+                        # Terms Checkbox ("Rezervasyon işlemimi onaylıyorum")
                         try:
                             try:
-                                checkbox = driver.find_element(By.ID, "pageContent_cboxOnay")
+                                terms_cb = driver.find_element(By.ID, "pageContent_cboxOnay")
                             except NoSuchElementException:
-                                checkbox = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
+                                terms_cb = driver.find_element(By.CSS_SELECTOR, "input[type='checkbox']")
                             
-                            driver.execute_script("arguments[0].click();", checkbox)
+                            if not terms_cb.is_selected():
+                                driver.execute_script("arguments[0].click();", terms_cb)
                             
                             # Save btn
                             save_btn = driver.find_element(By.ID, "lbtnKaydet")
                             driver.execute_script("arguments[0].click();", save_btn)
-                            log("Kaydet'e basıldı. 2FA Bekleniyor...")
+                            log("Kaydet'e basıldı. Sayfa yüklenmesi bekleniyor...")
                             
-                            sms_code = sms_kodunu_bekle(config)
-                            if sms_code:
-                                sms_input = driver.find_element(By.XPATH, 
-                                    "//input[contains(@id,'SMS') or contains(@id,'Sms') or contains(@id,'sms') "
-                                    "or contains(@placeholder,'Doğrulama') or contains(@placeholder,'Kod')]"
+                            # ASP.NET postback sonrası sayfanın yeniden yüklenmesini bekle
+                            time.sleep(5)
+                            
+                            # Sayfanın tamamen yüklendiğinden emin ol
+                            try:
+                                WebDriverWait(driver, 20).until(
+                                    lambda d: d.execute_script("return document.readyState") == "complete"
                                 )
-                                sms_input.send_keys(sms_code)
+                            except Exception:
+                                time.sleep(3)
+                            
+                            log("Sayfa yüklendi. SMS doğrulama kutusu aranıyor...")
+                            
+                            # Sayfadaki tüm input'ları logla (debug)
+                            try:
+                                all_inputs = driver.find_elements(By.TAG_NAME, "input")
+                                visible_inputs = []
+                                for inp in all_inputs:
+                                    try:
+                                        inp_id = inp.get_attribute("id") or ""
+                                        inp_type = inp.get_attribute("type") or ""
+                                        inp_placeholder = inp.get_attribute("placeholder") or ""
+                                        inp_name = inp.get_attribute("name") or ""
+                                        inp_visible = inp.is_displayed()
+                                        if inp_type in ("text", "number", "tel", "") and inp_visible:
+                                            visible_inputs.append(f"id={inp_id}, type={inp_type}, name={inp_name}, placeholder={inp_placeholder}")
+                                    except Exception:
+                                        pass
+                                log(f"Sayfadaki görünür text input'lar ({len(visible_inputs)}): {visible_inputs}")
+                            except Exception as e:
+                                log(f"Input tarama hatası: {e}")
+                            
+                            # SMS input'unu bul - birden fazla yöntem dene
+                            sms_input = None
+                            
+                            # Yöntem 1: placeholder ile
+                            selectors = [
+                                "//input[contains(@placeholder,'Do')]",
+                                "//input[contains(@placeholder,'Kod')]",
+                                "//input[contains(@placeholder,'kod')]",
+                                "//input[contains(@id,'Sms')]",
+                                "//input[contains(@id,'SMS')]",
+                                "//input[contains(@id,'sms')]",
+                                "//input[contains(@id,'txtKod')]",
+                                "//input[contains(@id,'txtSms')]",
+                                "//input[contains(@id,'Dogrulama')]",
+                                "//input[contains(@name,'Sms')]",
+                                "//input[contains(@name,'SMS')]",
+                            ]
+                            
+                            for sel in selectors:
+                                try:
+                                    el = driver.find_element(By.XPATH, sel)
+                                    if el.is_displayed():
+                                        sms_input = el
+                                        log(f"SMS kutusu bulundu: selector={sel}, id={el.get_attribute('id')}, placeholder={el.get_attribute('placeholder')}")
+                                        break
+                                except Exception:
+                                    pass
+                            
+                            # Yöntem 2: Görünür text input'lardan bul (TC/şifre input'u olmayan)
+                            if not sms_input:
+                                try:
+                                    all_inputs = driver.find_elements(By.CSS_SELECTOR, "input[type='text'], input[type='number'], input[type='tel'], input:not([type])")
+                                    for inp in all_inputs:
+                                        try:
+                                            if inp.is_displayed():
+                                                inp_id = (inp.get_attribute("id") or "").lower()
+                                                inp_val = inp.get_attribute("value") or ""
+                                                # TC/şifre alanlarını atla
+                                                if "tc" in inp_id or "sifre" in inp_id or "giris" in inp_id or "password" in inp_id:
+                                                    continue
+                                                # Zaten dolu olan alanları atla
+                                                if len(inp_val) > 5:
+                                                    continue
+                                                sms_input = inp
+                                                log(f"SMS kutusu (fallback): id={inp.get_attribute('id')}, name={inp.get_attribute('name')}")
+                                                break
+                                        except Exception:
+                                            pass
+                                except Exception:
+                                    pass
+                            
+                            # Yöntem 3: Sayfa kaynağını kaydet (debug)
+                            if not sms_input:
+                                try:
+                                    import os as _os
+                                    debug_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "sms_page_debug.html")
+                                    with open(debug_path, "w", encoding="utf-8") as f:
+                                        f.write(driver.page_source)
+                                    log(f"SMS kutusu bulunamadı! Sayfa HTML'i kaydedildi: {debug_path}")
+                                except Exception:
+                                    log("SMS kutusu bulunamadı ve HTML kaydedilemedi!")
                                 
-                                verify_btn = driver.find_element(By.ID, "lbtnSms")
-                                driver.execute_script("arguments[0].click();", verify_btn)
-                                log("SMS girildi, rezervasyon tamam!")
-                                send_telegram(f"<b>[SPOR BOTU] BAŞARILI!</b>\nRezervasyon onaylandı.", config)
-                                alarm_olustur(config, best_slot['date'], best_slot['time'], best_slot['court'])
+                            if sms_input:
+                                sms_code = sms_kodunu_bekle(config)
+                                if sms_code:
+                                    log(f"SMS kodu giriliyor: {sms_code}")
+                                    sms_input.clear()
+                                    sms_input.send_keys(sms_code)
+                                    time.sleep(1)
+                                    
+                                    # Doğrula butonunu bul
+                                    verify_btn = None
+                                    verify_selectors = [
+                                        (By.ID, "lbtnSms"),
+                                        (By.XPATH, "//a[contains(@id,'Sms')]"),
+                                        (By.XPATH, "//a[contains(@id,'SMS')]"),
+                                        (By.XPATH, "//input[contains(@id,'Sms')]"),
+                                        (By.XPATH, "//button[contains(@id,'Sms')]"),
+                                        (By.XPATH, "//*[contains(text(),'Do') and (self::a or self::button or self::input)]"),
+                                    ]
+                                    for by, sel in verify_selectors:
+                                        try:
+                                            btn = driver.find_element(by, sel)
+                                            if btn.is_displayed():
+                                                verify_btn = btn
+                                                log(f"Doğrula butonu bulundu: {sel}")
+                                                break
+                                        except Exception:
+                                            pass
+                                    
+                                    if verify_btn:
+                                        driver.execute_script("arguments[0].click();", verify_btn)
+                                        log("SMS girildi, rezervasyon tamamlandı!")
+                                        send_telegram(f"<b>[SPOR BOTU] BAŞARILI!</b>\nRezervasyon onaylandı.", config)
+                                        alarm_olustur(config, best_slot['date'], best_slot['time'], best_slot['court'])
+                                    else:
+                                        log("Doğrula butonu bulunamadı!")
                         except Exception as e:
                             log(f"Onaylama ekranı hatası: {e}")
                 

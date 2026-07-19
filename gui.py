@@ -102,8 +102,8 @@ class SporBotGUI(ctk.CTk):
         days_list = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"]
         for i, day in enumerate(days_list):
             var = ctk.StringVar(value=day if day in self.config.get("tercih_edilen_gunler", []) else "")
-            cb = ctk.CTkCheckBox(self.days_frame, text=day, variable=var, onvalue=day, offvalue="")
-            cb.grid(row=0, column=i, padx=5, pady=5)
+            cb = ctk.CTkCheckBox(self.days_frame, text=day, variable=var, onvalue=day, offvalue="", width=60)
+            cb.grid(row=0, column=i, padx=3, pady=5)
             self.days_vars[day] = var
 
         # Hours Selection (Chips)
@@ -128,9 +128,28 @@ class SporBotGUI(ctk.CTk):
                 col_idx = 0
                 row_idx += 1
 
+        # Courts Selection (Tenis Kort Seviye Seçenekleri)
+        self.courts_label = ctk.CTkLabel(self.filters_frame, text="Tenis Kort / Seviye Tercihleri", font=ctk.CTkFont(weight="bold"))
+        self.courts_label.grid(row=4, column=0, padx=10, pady=(10, 5), sticky="w")
+
+        self.courts_frame = ctk.CTkFrame(self.filters_frame, fg_color="transparent")
+        self.courts_frame.grid(row=5, column=0, padx=10, pady=(0, 10), sticky="w")
+
+        self.c3_var = ctk.BooleanVar(value=self.config.get("kort_3_izni", True))
+        self.c3_cb = ctk.CTkCheckBox(self.courts_frame, text="Kort 3 (Başlangıç - Orta)", variable=self.c3_var)
+        self.c3_cb.grid(row=0, column=0, padx=5, pady=5)
+
+        self.c1_var = ctk.BooleanVar(value=self.config.get("kort_1_izni", True))
+        self.c1_cb = ctk.CTkCheckBox(self.courts_frame, text="Kort 1 (Başlangıç)", variable=self.c1_var)
+        self.c1_cb.grid(row=0, column=1, padx=15, pady=5)
+
+        self.c1_req_c3_var = ctk.BooleanVar(value=self.config.get("kort1_kort3_sarti", False))
+        self.c1_req_c3_cb = ctk.CTkCheckBox(self.courts_frame, text="Kort 1'i sadece Kort 3 de aynı saatte varsa al", variable=self.c1_req_c3_var)
+        self.c1_req_c3_cb.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+
         # Advance toggles
         self.advanced_frame = ctk.CTkFrame(self.filters_frame, fg_color="transparent")
-        self.advanced_frame.grid(row=4, column=0, padx=10, pady=(10, 10), sticky="w")
+        self.advanced_frame.grid(row=6, column=0, padx=10, pady=(10, 10), sticky="w")
         
         self.test_mode_var = ctk.BooleanVar(value=self.config.get("test_modu", False))
         self.test_mode_cb = ctk.CTkSwitch(self.advanced_frame, text="Test Modu (Kaydet'e Basmaz)", variable=self.test_mode_var)
@@ -201,6 +220,10 @@ class SporBotGUI(ctk.CTk):
         
         disk_config["test_modu"] = self.test_mode_var.get()
         disk_config["yeni_seans_yukseltme_izni"] = self.upgrade_new_var.get()
+        
+        disk_config["kort_3_izni"] = self.c3_var.get()
+        disk_config["kort_1_izni"] = self.c1_var.get()
+        disk_config["kort1_kort3_sarti"] = self.c1_req_c3_var.get()
         
         try:
             disk_config["alarm_dakika_once"] = int(self.alarm_entry.get())

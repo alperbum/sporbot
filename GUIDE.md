@@ -64,6 +64,10 @@ Spor İstanbul rezervasyon yaparken telefonunuza SMS ile onay kodu gönderir. iP
 
 1. Masaüstündeki `baslat.bat` dosyasına çift tıklayarak arayüzü açın.
 2. **TC Kimlik**, **Şifre**, **Telegram Token** ve **Chat ID** bilgilerinizi girin.
-3. Tercih ettiğiniz **Günler**, **Saatler** ve **Branş** seçimini yapın.
-4. **"Ayarları Kaydet"** butonuna basın.
-5. **"Botu Başlat"** butonuna basarak taramayı başlatın.
+3. **Branş Seçimi** (TENİS, FİTNESS, YÜZME) ve **Tarama Aralığı** (Örn: 2 dk) ayarlarını yapın.
+4. Alarm bildirimleri için **Seanstan kaç dk önce** haber verilmesini istediğinizi belirleyin.
+5. Sağ taraftan tercih ettiğiniz **Günler** ve **Saatler** seçimini yapın.
+6. **Tenis Kort / Seviye Tercihleri** bölümünden istediğiniz kort seviyelerini (Kort 1, Kort 3) belirleyin ve isterseniz "Kort 1'i sadece Kort 3 de aynı saatte varsa al" şartını açın.
+7. İsteğe bağlı olarak **Test Modu** (Sisteme kaydetmez, sadece seans bulup bulmadığını test eder) veya **Yeni Seans Yükseltme İzni** (Önerilmez) gibi gelişmiş seçenekleri ayarlayabilirsiniz.
+8. **"Ayarları Kaydet"** butonuna basın.
+9. **"Botu Başlat"** butonuna basarak taramayı başlatın. İşlemleri sağ alttaki log penceresinden takip edebilirsiniz.
