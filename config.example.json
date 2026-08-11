@@ -3,7 +3,7 @@
     "sifre": "SPOR_ISTANBUL_SIFRENIZ",
     "telegram_token": "TELEGRAM_BOT_TOKEN",
     "telegram_chat_id": "TELEGRAM_CHAT_ID",
-    "tarama_araligi_dakika": 2,
+    "tarama_araligi_saniye": 20,
     "secili_spor": "TENİS",
     "tercih_edilen_gunler": [
         "Pzt",
@@ -23,5 +23,10 @@
     "test_modu": false,
     "yeni_seans_yukseltme_izni": false,
     "alarm_dakika_once": 30,
-    "aktif_alarmlar": []
+    "aktif_alarmlar": [],
+    "kort_3_izni": true,
+    "kort_4_izni": true,
+    "kort_6_izni": true,
+    "kort_1_izni": true,
+    "kort1_kort3_sarti": false
 }

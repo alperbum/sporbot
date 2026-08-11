@@ -17,7 +17,7 @@ Her iki botu da oluşturmak için Telegram'ın resmi bot yöneticisi olan **BotF
 
 1. Telegram arama çubuğuna **[@BotFather](https://t.me/BotFather)** yazın ve başlatın.
 2. Yeni bir bot oluşturmak için sohbete `/newbot` komutunu gönderin.
-3. Bot 1 için bir isim (Örn: `SporBot`) ve benzersiz bir kullanıcı adı (Örn: `@sporIstanbulAlper_bot`) belirleyin.
+3. Bot 1 için bir isim (Örn: `SporBot`) ve benzersiz bir kullanıcı adı (Örn: `@kendi_bot_adiniz`) belirleyin.
 4. İşlem tamamlandığında BotFather size uzun bir **HTTP API Token** verecektir. Bu token'ı kopyalayıp güvenli bir yere not edin.
 5. Aynı adımları tekrar uygulayarak **Bot 2**'yi oluşturun ve onun da token'ını kopyalayın.
 
@@ -44,12 +44,25 @@ Her iki botu da oluşturmak için Telegram'ın resmi bot yöneticisi olan **BotF
 
 ### 🆔 Adım 3: Grup Chat ID Alma
 
-Botun doğru gruba mesaj gönderebilmesi için grubun benzersiz kimlik numarasını (Chat ID) öğrenmeniz gerekir.
+Botun doğru gruba mesaj gönderebilmesi için grubun benzersiz kimlik numarasını (Chat ID) öğrenmeniz gerekir. Bunu öğrenmek için aşağıdaki alternatif yöntemlerden birini kullanabilirsiniz:
 
-1. Oluşturduğunuz gruba **[@GetIDBot](https://t.me/GetIDBot)** adlı botu ekleyin.
-2. Bot gruba eklendiğinde otomatik olarak veya gruba `/my_id` yazdığınızda size bir Chat ID verecektir.
-3. Grup Chat ID'leri genellikle eksi (`-`) işareti ile başlar (Örn: `-1005284174260` veya `-5284174260`).
-4. Bu ID numarasını kopyalayıp bot ayarlarınızdaki **Telegram Chat ID** kutucuğuna yapıştırın.
+**Yöntem 1: Web Telegram Kullanarak (En Kolay Yöntem)**
+1. Bilgisayarınızdan tarayıcınızı açın ve [Telegram Web](https://web.telegram.org/)'e giriş yapın.
+2. Oluşturduğunuz gruba tıklayın.
+3. Tarayıcının üst kısmındaki adres çubuğuna bakın. Link şu şekilde görünecektir: `https://web.telegram.org/a/#-1001234567890` veya `https://web.telegram.org/k/#-1001234567890`.
+4. Buradaki `#` işaretinden sonraki eksi (`-`) ile başlayan numara (örn: `-1001234567890`) sizin **Chat ID**'nizdir.
+
+**Yöntem 2: API Üzerinden Öğrenme (Manuel Yöntem)**
+1. Grubunuza botunuzu eklediğinizden emin olun ve gruba `test` yazıp gönderin.
+2. Tarayıcınızda yeni bir sekme açın ve şu adrese gidin (kendi bot token'ınızı yazın):
+   `https://api.telegram.org/bot<BOT_TOKEN>/getUpdates`
+3. Açılan karmaşık yazılar (JSON) içerisinde `"chat":{"id":-1001234567890` gibi bir kısım bulun. Oradaki eksi ile başlayan sayı sizin Chat ID'nizdir.
+
+**Yöntem 3: ID Botları Kullanarak (Alternatif)**
+1. Oluşturduğunuz gruba **[@RawDataBot](https://t.me/RawDataBot)** veya **[@GetIDBot](https://t.me/GetIDBot)** ekleyin.
+2. Bot gruba katıldığında size bir mesaj gönderecek ve "Chat" veya "Message" bölümünün altında id numaranızı (örn: `-100...`) gösterecektir. (Not: Bazı ID botları zaman zaman çalışmayabilir veya kapanmış olabilir, bu durumda diğer yöntemleri kullanın).
+
+**Önemli Not:** Grup Chat ID'leri her zaman eksi (`-`) işareti ile başlar ve genellikle `-100` ile devam eder. Bu ID numarasını kopyalayıp arayüzdeki **Telegram Chat ID** kutucuğuna eksiksiz (başındaki eksi işareti dahil) yapıştırın.
 
 ---
 
@@ -80,12 +93,12 @@ Spor İstanbul rezervasyonu sırasında sistem size bir SMS kodu gönderir. Bu a
 
   **Alan 1 (Metin):**
   - **Anahtar (Key):** `chat_id`
-  - **Değer (Value):** `-5284174260` *(Kendi Grup Chat ID'nizi yazın)*
+  - **Değer (Value):** `-1234567890` *(Kendi Grup Chat ID'nizi yazın)*
 
   **Alan 2 (Metin):**
   - **Anahtar (Key):** `text`
   - **Değer (Value):** Kutuya tıklayın, klavyenin üstündeki "Değişken Seç" veya doğrudan menüden **Kestirme Girdisi (Shortcut Input)** seçeneğini ekleyin. Fakat **Kestirme Girdisi** metninin en başına Bot 1'in adını yazmalısınız.
-  - Örnek Görünüm: `@sporIstanbulAlper_bot Kestirme Girdisi`
+  - Örnek Görünüm: `@kendi_bot_adiniz Kestirme Girdisi`
   *(Başına Bot 1'in kullanıcı adını etiketleyerek eklemek, Telegram'ın bot mesajını diğer bota iletmesini kesinleştirir!)*
 
 Otomasyonu kaydedin. Artık size içinde "onay kodunuz" geçen bir mesaj geldiğinde, telefonunuz bunu saniyesinde Telegram grubuna yollayacaktır.
